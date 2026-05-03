@@ -1,4 +1,4 @@
-n# Spark Transformation Framework
+# Spark Transformation Framework
 
 A declarative, YAML-driven Spark data transformation framework. Define your entire pipeline — sources, transformations, and sinks — in a single YAML file, then run it with `spark-submit`.
 
