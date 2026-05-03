@@ -1,0 +1,85 @@
+---
+# Example: load once, persist, then write two different filtered views to different sinks.
+# Demonstrates: persist transformer, multiple sinks from one source, csv sink, jdbc sink.
+#
+# Without persist, Spark would re-read and re-execute the JDBC source twice —
+# once for each downstream branch. persist caches the DataFrame in memory after
+# the first pass so both sinks reuse the same in-memory data.
+#
+# Run with:
+#   spark-submit --class com.sparktf.Application spark-transform-framework.jar \
+#     --jars /path/to/postgresql-42.7.3.jar \
+#     -f examples/persist-and-multi-sink.yaml
+name: persist-and-multi-sink
+
+variables:
+  - name: outputPath
+    type: string
+    value: "/data/output/active-orders"
+
+actions:
+  # --- Source ---
+  - name: load-orders
+    kind: source
+    type: jdbc
+    options:
+      url: jdbc:postgresql://localhost:5432/mydb
+      user: myuser
+      password: mypassword
+      driver: org.postgresql.Driver
+      dbtable: orders
+
+  # --- Cache ---
+  # Persist after the source so the data is read from JDBC only once.
+  # Both downstream branches (active-view and cancelled-view) will use this cache.
+  - name: cached-orders
+    kind: transformer
+    type: persist
+    input: load-orders
+
+  # --- Branch 1: active orders → CSV file ---
+  - name: active-orders
+    kind: transformer
+    type: general
+    input: cached-orders
+    filter: "status = 'ACTIVE'"
+    select:
+      - order_id
+      - customer_id
+      - amount
+      - order_date
+
+  - name: write-active-csv
+    kind: sink
+    type: csv
+    input: active-orders
+    path: "{{outputPath}}"
+    mode: Overwrite
+    options:
+      header: "true"
+
+  # --- Branch 2: cancelled orders → write back to a summary table in the DB ---
+  - name: cancelled-orders
+    kind: transformer
+    type: general
+    input: cached-orders
+    filter: "status = 'CANCELLED'"
+    select:
+      - order_id
+      - customer_id
+      - amount
+      - order_date
+      - cancellation_reason
+
+  - name: write-cancelled-db
+    kind: sink
+    type: jdbc
+    input: cancelled-orders
+    mode: Overwrite
+    options:
+      url: jdbc:postgresql://localhost:5432/mydb
+      user: myuser
+      password: mypassword
+      driver: org.postgresql.Driver
+      dbtable: cancelled_orders_summary
+...

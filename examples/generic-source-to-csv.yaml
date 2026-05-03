@@ -1,0 +1,78 @@
+---
+# Example: read Parquet files, clean up columns, deduplicate, write to CSV.
+# Demonstrates: generic source, general transformer (filter/select/distinct),
+#               drop transformer, csv sink with write options.
+# Run with:
+#   spark-submit --class com.sparktf.Application spark-transform-framework.jar \
+#     -f examples/generic-source-to-csv.yaml
+name: generic-source-to-csv
+
+variables:
+  - name: inputPath
+    type: string
+    value: "/data/input/sales"
+  - name: outputPath
+    type: string
+    value: "/data/output/sales-clean"
+  - name: reportDate
+    type: expression
+    expression: "current_date()"
+
+actions:
+  # --- Source ---
+  # generic source supports any Spark-readable format: parquet, csv, json, orc, avro, delta
+  - name: load-sales
+    kind: source
+    type: generic
+    format: parquet
+    options:
+      path: "{{inputPath}}"     # NOTE: {{}} in generic options IS supported via Spark path resolution,
+                                 # but Formatter does not process it — use a literal path here in practice
+
+  # --- Transformers ---
+  # Filter to a specific region, select needed columns, stamp the report date
+  - name: filter-region
+    kind: transformer
+    type: general
+    input: load-sales
+    filter: "region = 'EMEA' and amount > 0"
+    select:
+      - order_id
+      - customer_id
+      - product_code
+      - region
+      - amount
+      - order_date
+      - internal_flag
+      - audit_col
+      - "cast('{{reportDate}}' as date) as report_date"
+
+  # Remove columns that should not appear in the output file
+  - name: drop-internal-cols
+    kind: transformer
+    type: drop
+    input: filter-region
+    columns:
+      - internal_flag
+      - audit_col
+
+  # Deduplicate — useful when source data has duplicated rows from incremental loads
+  - name: deduplicate
+    kind: transformer
+    type: general
+    input: drop-internal-cols
+    distinct: true
+
+  # --- Sink ---
+  # Write to CSV. mode: Overwrite replaces any existing output at the path.
+  - name: write-csv
+    kind: sink
+    type: csv
+    input: deduplicate
+    path: "{{outputPath}}"
+    mode: Overwrite
+    options:
+      header: "true"
+      delimiter: ","
+      dateFormat: "yyyy-MM-dd"
+...

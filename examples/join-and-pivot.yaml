@@ -1,0 +1,67 @@
+---
+# Example: join two JDBC sources, pivot the result, and write to CSV.
+name: join-and-pivot-example
+
+actions:
+  - name: load-measurements
+    kind: source
+    type: jdbc
+    options:
+      url: jdbc:postgresql://localhost:5432/mydb
+      user: myuser
+      password: mypassword
+      driver: org.postgresql.Driver
+      dbtable: measurements
+
+  - name: load-dimension
+    kind: source
+    type: jdbc
+    options:
+      url: jdbc:postgresql://localhost:5432/mydb
+      user: myuser
+      password: mypassword
+      driver: org.postgresql.Driver
+      dbtable: dimension_table
+
+  - name: join-data
+    kind: transformer
+    type: join
+    left:
+      input: load-measurements
+      alias: m
+    right:
+      input: load-dimension
+      alias: d
+    join: left
+    on: m.dim_id = d.id
+    select:
+      - column: m.timestamp
+        alias: ts
+      - column: m.metric_name
+        alias: metric
+      - column: m.value
+        alias: value
+      - column: d.label
+        alias: label
+
+  - name: pivot-by-metric
+    kind: transformer
+    type: pivot
+    input: join-data
+    groupBy:
+      - ts
+      - label
+    pivotColumn: metric
+    aggregations:
+      - cast(sum(value) as double) as total
+      - cast(avg(value) as double) as avg_value
+
+  - name: write-csv
+    kind: sink
+    type: csv
+    input: pivot-by-metric
+    options:
+      path: /tmp/output/pivot-result
+      header: "true"
+      mode: overwrite
+...

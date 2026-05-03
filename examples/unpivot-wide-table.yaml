@@ -1,0 +1,74 @@
+---
+# Example: pivot a narrow table wide, then unpivot it back to long format.
+# Demonstrates: group, pivot, unpivot transformers in sequence.
+#
+# Input (narrow/long):
+#   | day        | region | metric  | value |
+#   | 2024-01-01 | EMEA   | revenue | 1000  |
+#   | 2024-01-01 | EMEA   | orders  | 42    |
+#
+# After pivot (wide):
+#   | day        | region | revenue | orders |
+#   | 2024-01-01 | EMEA   | 1000    | 42     |
+#
+# After unpivot (long again):
+#   | day        | region | metric_name | metric_value |
+#   | 2024-01-01 | EMEA   | revenue     | 1000         |
+#   | 2024-01-01 | EMEA   | orders      | 42           |
+#
+# Run with:
+#   spark-submit --class com.sparktf.Application spark-transform-framework.jar \
+#     -f examples/unpivot-wide-table.yaml
+name: unpivot-wide-table
+
+actions:
+  # --- Source ---
+  - name: load-metrics
+    kind: source
+    type: generic
+    format: csv
+    options:
+      path: /data/input/daily-metrics.csv
+      header: "true"
+      inferSchema: "true"
+
+  # --- Pivot: turn the metric column into separate value columns ---
+  # groupBy defines the row keys; pivotColumn defines which column's distinct
+  # values become the new column names.
+  - name: pivot-metrics
+    kind: transformer
+    type: pivot
+    input: load-metrics
+    groupBy:
+      - day
+      - region
+    pivotColumn: metric
+    aggregations:
+      - "sum(value) as value"
+
+  # --- Inspect the wide format ---
+  - name: show-wide
+    kind: sink
+    type: show
+    input: pivot-metrics
+    printSchema: true
+
+  # --- Unpivot: melt all metric columns back into rows ---
+  # columns: the columns to KEEP as-is (the row identity columns).
+  # All other columns (revenue, orders, ...) are melted into nameColumn/valueColumn.
+  - name: unpivot-metrics
+    kind: transformer
+    type: unpivot
+    input: pivot-metrics
+    columns:
+      - day
+      - region
+    nameColumn: metric_name
+    valueColumn: metric_value
+
+  # --- Inspect the long format ---
+  - name: show-long
+    kind: sink
+    type: show
+    input: unpivot-metrics
+...

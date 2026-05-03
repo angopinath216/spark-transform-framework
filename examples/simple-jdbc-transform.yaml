@@ -1,0 +1,46 @@
+---
+# Simple example: read from a JDBC source, filter/select, and show the result.
+# Run with:
+#   spark-submit --class com.sparktf.Application spark-transform-framework.jar -f examples/simple-jdbc-transform.yaml
+name: simple-jdbc-transform
+
+variables:
+  # string variable — use {{statusFilter}} inside filter/select expressions
+  - name: statusFilter
+    type: string
+    value: "ACTIVE"
+  # expression variable — evaluated by Spark SQL at pipeline startup
+  - name: reportDate
+    type: expression
+    expression: "current_date()"
+
+actions:
+  - name: load-source-data
+    kind: source
+    type: jdbc
+    options:
+      url: jdbc:postgresql://localhost:5432/mydb
+      user: myuser
+      password: mypassword
+      driver: org.postgresql.Driver
+      dbtable: my_table      # NOTE: {{}} substitution is NOT applied to jdbc options
+
+  - name: filter-and-select
+    kind: transformer
+    type: general
+    input: load-source-data
+    filter: "status = '{{statusFilter}}'"   # {{}} substitution works in filter/select
+    select:
+      - id
+      - name
+      - status
+      - created_at
+      - "cast('{{reportDate}}' as date) as report_date"
+    order:
+      - created_at
+
+  - name: show-results
+    kind: sink
+    type: show
+    input: filter-and-select
+...

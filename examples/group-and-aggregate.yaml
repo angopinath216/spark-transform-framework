@@ -1,0 +1,61 @@
+---
+# Example: read a CSV file, group by multiple columns, aggregate metrics, inspect schema and results.
+# Demonstrates: generic source (csv), group transformer, show sink with printSchema.
+# Run with:
+#   spark-submit --class com.sparktf.Application spark-transform-framework.jar \
+#     -f examples/group-and-aggregate.yaml
+name: group-and-aggregate
+
+actions:
+  # --- Source ---
+  # Read a CSV file with a header row. inferSchema lets Spark detect numeric types.
+  - name: load-orders
+    kind: source
+    type: generic
+    format: csv
+    options:
+      path: /data/input/orders.csv
+      header: "true"
+      inferSchema: "true"
+
+  # --- Transformers ---
+  # Filter out cancelled orders before aggregating
+  - name: active-orders
+    kind: transformer
+    type: general
+    input: load-orders
+    filter: "status != 'CANCELLED'"
+
+  # Group by region and product, compute multiple aggregations in one step.
+  # Aggregation expressions are standard Spark SQL — any valid agg function works.
+  - name: sales-summary
+    kind: transformer
+    type: group
+    input: active-orders
+    groupBy:
+      - region
+      - product_code
+    aggregations:
+      - "sum(amount) as total_revenue"
+      - "count(order_id) as order_count"
+      - "round(avg(amount), 2) as avg_order_value"
+      - "max(order_date) as latest_order_date"
+
+  # Order the summary for readability before showing it
+  - name: sorted-summary
+    kind: transformer
+    type: general
+    input: sales-summary
+    order:
+      - region
+      - product_code
+
+  # --- Sink ---
+  # printSchema: true prints the inferred schema above the data rows.
+  # Useful to verify column types after groupBy/aggregation.
+  - name: show-summary
+    kind: sink
+    type: show
+    input: sorted-summary
+    printSchema: true
+...

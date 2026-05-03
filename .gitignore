@@ -1,0 +1,53 @@
+# Build output
+target/
+*.jar
+*.war
+*.zip
+!.mvn/wrapper/maven-wrapper.jar
+
+# Maven wrapper
+.mvn/
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+!.idea/.gitignore
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Spark local temp
+derby.log
+metastore_db/
+spark-warehouse/
+
+# Environment / secrets
+*.env
+.env
+credentials.properties

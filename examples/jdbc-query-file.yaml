@@ -1,0 +1,60 @@
+---
+# Example: use a queryFile to run parameterised SQL against a JDBC source.
+#
+# This is the correct way to use {{variables}} with a JDBC source.
+# Variable substitution ({{name}}) is NOT applied to the options map —
+# it IS applied to the content of the queryFile.
+#
+# The SQL file at examples/sql/date-range-query.sql contains:
+#   select ... where ne_datetime between '{{startDate}}' and '{{endDate}}'
+# The framework reads the file, resolves the variables, then passes the
+# result as the JDBC "query" option, overriding dbtable.
+#
+# Run with:
+#   spark-submit --class com.sparktf.Application spark-transform-framework.jar \
+#     --jars /path/to/postgresql-42.7.3.jar \
+#     -f examples/jdbc-query-file.yaml
+name: jdbc-query-file
+
+variables:
+  # Date range for the query — resolved before the JDBC source runs
+  - name: startDate
+    type: string
+    value: "2024-01-01 00:00:00"
+  - name: endDate
+    type: expression
+    expression: "date_format(current_date(), 'yyyy-MM-dd 23:59:59')"
+
+actions:
+  # --- Source ---
+  # queryFile path is relative to the working directory of the Spark driver.
+  # The file content is read, {{startDate}} and {{endDate}} are substituted,
+  # and the result is sent to the JDBC driver as a subquery.
+  - name: load-measurements
+    kind: source
+    type: jdbc
+    options:
+      url: jdbc:postgresql://localhost:5432/mydb
+      user: myuser
+      password: mypassword
+      driver: org.postgresql.Driver
+    queryFile: examples/sql/date-range-query.sql
+
+  # --- Transformers ---
+  - name: select-columns
+    kind: transformer
+    type: general
+    input: load-measurements
+    select:
+      - ne_datetime
+      - cell_id
+      - metric_name
+      - value
+
+  # --- Sink ---
+  - name: show-results
+    kind: sink
+    type: show
+    input: select-columns
+    printSchema: true
+...
